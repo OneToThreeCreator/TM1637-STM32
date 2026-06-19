@@ -110,7 +110,7 @@ int main(void)
     (void)RTC->DR; // Always read data register!
     if (prevtime != time) {
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-      TM1637_ShowBCD_MS(&htm1637, time);
+      TM1637_ShowBCD(&htm1637, time);
       prevtime = time;
     }
   }

@@ -77,8 +77,10 @@ static const uint8_t tm1637_chars[] = {
 };
 
 // Taken from https://github.com/RobTillaart/TM1637_RT
-static const uint8_t tm1637_4digits_order[] = {3, 2, 1, 0};
-static const uint8_t tm1637_6digits_order[] = {3, 4, 5, 0, 1, 2};
+static uint8_t tm1637_digits_order[TM1637_DIGITS_MAX]  = {0};
+#if TM1637_DIGITS_MAX >= 6
+static const uint8_t tm1637_6digits_order[] = {2, 1, 0, 5, 4, 3};
+#endif
 
 static void delay_us(TM1637_HandleTypeDef *h, uint32_t us) {
   uint32_t start = SysTick->VAL;
@@ -158,6 +160,7 @@ static void copy_raw_ordered(uint8_t *buf, TM1637_HandleTypeDef *htm) {
 
 // --- API ---
 void TM1637_Brightness(TM1637_HandleTypeDef *htm, uint8_t brightness) {
+  brightness = MIN(brightness, 7);
 #if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
   if (htm->mutex) {
     if (xSemaphoreTake(htm->mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -169,7 +172,7 @@ void TM1637_Brightness(TM1637_HandleTypeDef *htm, uint8_t brightness) {
     htm->brightness = brightness;
 }
 
-void TM1637_ShowRaw(TM1637_HandleTypeDef *htm, const uint8_t raw[4]) {
+void TM1637_ShowRaw(TM1637_HandleTypeDef *htm, const uint8_t raw[]) {
 #if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
   if (htm->mutex) {
     if (xSemaphoreTake(htm->mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
@@ -179,6 +182,23 @@ void TM1637_ShowRaw(TM1637_HandleTypeDef *htm, const uint8_t raw[4]) {
   } else
 #endif // TM1637_USE_FREERTOS
     memcpy(htm->raw, raw, htm->digits);
+}
+
+void TM1637_ShowRawRtL(TM1637_HandleTypeDef *htm, const uint8_t raw[]) {
+#if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
+  if (htm->mutex) {
+    if (xSemaphoreTake(htm->mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+      for (unsigned i = 0; i < htm->digits; ++i) {
+        htm->raw[htm->digits - i - 1] = raw[i];
+      }
+      xSemaphoreGive(htm->mutex);
+    }
+    return;
+  }
+#endif // TM1637_USE_FREERTOS
+  for (unsigned i = 0; i < htm->digits; ++i) {
+    htm->raw[htm->digits - i - 1] = raw[i];
+  }
 }
 
 void TM1637_Clear(TM1637_HandleTypeDef *htm) {
@@ -221,28 +241,33 @@ void TM1637_UpdateOnce(TM1637_HandleTypeDef *htm) {
 
 #if TM1637_DISPLAYS_MAX > 0
 TM1637_HandleTypeDef *htms[TM1637_DISPLAYS_MAX];
-uint32_t htms_size = 0;
+uint32_t htms_count = 0;
 #endif
 
 void TM1637_Init(TM1637_HandleTypeDef *htm) {
   assert(htm->digits < TM1637_DIGITS_MAX);
   if (htm->digits == 0)
     htm->digits = 4; // Reasonable default, clock displays show up relatively often
-  if (!htm->digits_order) {
-    if (htm->digits == 4) {
-      htm->digits_order = tm1637_4digits_order;
-    } else if (htm->digits == 6) {
-      htm->digits_order = tm1637_6digits_order;
-    } else {
-      assert(!"Please manually specify digits order for your display!");
-      return;
-    }
-  }
 #if TM1637_DISPLAYS_MAX > 0
-  assert(htms_size < TM1637_DISPLAYS_MAX);
-  htms[htms_size++] = htm;
+  assert(htms_count < TM1637_DISPLAYS_MAX);
+  htms[htms_count++] = htm;
 #endif
   memset(htm->raw, 0, sizeof(htm->raw));
+  if (!htm->digits_order) {
+#if TM1637_DIGITS_MAX >= 6
+    if (htm->digits == 6) {
+      htm->digits_order = tm1637_6digits_order;
+    } else
+#endif // TM1637_DIGITS_MAX
+    {
+      htm->digits_order = tm1637_digits_order;
+      if (tm1637_digits_order[TM1637_DIGITS_MAX - 1] == 0) {
+        for (unsigned i = 1; i < TM1637_DIGITS_MAX; ++i) {
+          tm1637_digits_order[i] = i;
+        }
+      }
+    }
+  }
 #if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
   if (htm->mutex == NULL) {
     htm->mutex = xSemaphoreCreateMutex();
@@ -256,11 +281,11 @@ void TM1637_Tick(void) {
   static uint32_t lastcalled = 0;
   static uint32_t i = 0;
   uint32_t time = HAL_GetTick();
-  if (time - lastcalled < TM1637_UPDATE_INTERVAL_MS / htms_size)
+  if (time - lastcalled < TM1637_UPDATE_INTERVAL_MS / htms_count)
     return;
   lastcalled = time;
   TM1637_UpdateOnce(htms[i++]);
-  if (i >= htms_size)
+  if (i >= htms_count)
     i = 0;
 }
 
@@ -270,9 +295,9 @@ static void TM1637_Task(void *empty) {
   uint32_t i = 0;
   for (;;){
     TM1637_UpdateOnce(htms[i++]);
-    if (i >= htms_size)
+    if (i >= htms_count)
       i = 0;
-    uint32_t waitfor = pdMS_TO_TICKS(TM1637_UPDATE_INTERVAL_MS / htms_size);
+    uint32_t waitfor = pdMS_TO_TICKS(TM1637_UPDATE_INTERVAL_MS / htms_count);
     vTaskDelayUntil(&xLastWakeTime, waitfor);
   }
 }
@@ -297,7 +322,7 @@ void TM1637_ShowDecimal(TM1637_HandleTypeDef *htm, int value, bool leading_zero)
   if (negative) {
     buf[i] = TM1637_CHAR_DASH;
   }
-  TM1637_ShowRaw(htm, buf);
+  TM1637_ShowRawRtL(htm, buf);
 }
 
 void TM1637_ShowHex(TM1637_HandleTypeDef *htm, unsigned value, bool leading_zero) {
@@ -310,7 +335,7 @@ void TM1637_ShowHex(TM1637_HandleTypeDef *htm, unsigned value, bool leading_zero
     buf[i++] = (value == 0 && !leading_zero) ? 0 : tm1637_chars[value % 16];
     value /= 16;
   }
-  TM1637_ShowRaw(htm, buf);
+  TM1637_ShowRawRtL(htm, buf);
 }
 
 void TM1637_ShowTime(TM1637_HandleTypeDef *htm, unsigned time) {
@@ -325,10 +350,10 @@ void TM1637_ShowTime(TM1637_HandleTypeDef *htm, unsigned time) {
   }
   if (htm->digits % 2 == 0)
     buf[htm->digits - 1] = tm1637_chars[time % 10];
-  TM1637_ShowRaw(htm, buf);
+  TM1637_ShowRawRtL(htm, buf);
 }
 
-void TM1637_ShowBCD_MS(TM1637_HandleTypeDef *htm, uint32_t time) {
+void TM1637_ShowBCD(TM1637_HandleTypeDef *htm, uint32_t time) {
   uint8_t buf[TM1637_DIGITS_MAX];
   buf[0] = tm1637_chars[time & 0xF];
   time >>= 4;
@@ -340,36 +365,38 @@ void TM1637_ShowBCD_MS(TM1637_HandleTypeDef *htm, uint32_t time) {
   }
   if (htm->digits % 2 == 0)
     buf[htm->digits - 1] = tm1637_chars[time & 0xF];
-  TM1637_ShowRaw(htm, buf);
+  TM1637_ShowRawRtL(htm, buf);
 }
 
 void TM1637_ShowBCD_HM(TM1637_HandleTypeDef *htm, uint32_t time) {
-  TM1637_ShowBCD_MS(htm, time >> (6 - MIN(htm->digits, 6)) * 4);
+  TM1637_ShowBCD(htm, time >> (6 - MIN(htm->digits, 6)) * 4);
+}
+
+uint8_t TM1637_ASCIIToRaw(char c) {
+  if (c >= '0' && c <= '9') {
+    c += TM1637_CHARS_NUMS - '0';
+  } else if (c >= 'A' && c <= 'Z') {
+    c += TM1637_CHARS_LETTERS - 'A';
+  } else if (c >= 'a' && c <= 'z') {
+    c += TM1637_CHARS_LETTERS - 'a';
+  } else if (c == '-') {
+    c = TM1637_CHAR_DASH;
+  } else if (c == '_') {
+    c = TM1637_CHAR_UNDERSCORE;
+  } else if (c == '=') {
+    c = TM1637_CHAR_EQUAL;
+  } else {
+    return 0;
+  }
+  return tm1637_chars[(unsigned)c];
 }
 
 void TM1637_ShowText(TM1637_HandleTypeDef *htm, const char *const str) {
   uint8_t buf[TM1637_DIGITS_MAX] = {0};
   for (unsigned i = 0; i < htm->digits; ++i) {
-    unsigned char c = str[i];
-    if (c == '\0') {
+    if (str[i] == '\0')
       break;
-    } else if (c >= '0' && c <= '9') {
-      c += TM1637_CHARS_NUMS - '0';
-    } else if (c >= 'A' && c <= 'Z') {
-      c += TM1637_CHARS_LETTERS - 'A';
-    } else if (c >= 'a' && c <= 'z') {
-      c += TM1637_CHARS_LETTERS - 'a';
-    } else if (c == '-') {
-      c = TM1637_CHAR_DASH;
-    } else if (c == '_') {
-      c = TM1637_CHAR_UNDERSCORE;
-    } else if (c == '=') {
-      c = TM1637_CHAR_EQUAL;
-    } else {
-      buf[htm->digits - i - 1] = 0;
-      continue;
-    }
-    buf[htm->digits - i - 1] = tm1637_chars[c];
+    buf[i] = TM1637_ASCIIToRaw(str[i]);
   }
   TM1637_ShowRaw(htm, buf);
 }
