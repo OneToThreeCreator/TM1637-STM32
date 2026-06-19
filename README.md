@@ -13,7 +13,7 @@ add_subdirectory(FULL_PATH_TO_TM1637-LIB TM1637_LIB)
 target_link_libraries(${CMAKE_PROJECT_NAME} tm1637)
 ```
 or manually add all the sources to your project (and include Inc dir).
-Also copy file TM1637_LIB/Config/template_tm1637_config.h to your include dir
+Also copy file TM1637-LIB/Config/template_tm1637_config.h to your include dir
 and rename it to "tm1637_config.h". Tweak it to your needs.
 Can be used with FreeRTOS or without, depending on application.
 ## Usage
