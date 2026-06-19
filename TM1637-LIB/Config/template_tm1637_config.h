@@ -1,0 +1,16 @@
+#ifndef TM1637_CONFIG_H
+#define TM1637_CONFIG_H
+
+#define TM1637_USE_FREERTOS 1
+
+#define TM1637_UPDATE_INTERVAL_MS 500
+#define TM1637_DISPLAYS_MAX 2
+
+#define TM1637_DIGITS_MAX 8
+
+#if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
+#include "cmsis_os.h"
+#define TM1637_PRIORITY osPriorityLow
+#endif
+
+#endif // TM1637_CONFIG_H
