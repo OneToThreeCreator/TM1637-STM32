@@ -255,12 +255,12 @@ static void MX_GPIO_Init(void)
 void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
-  uint32_t i = 0;
+  unsigned i = 0;
   /* Infinite loop */
   for(;;)
   {
     HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-    TM1637_ShowDecimal(&htm1637, i++, 0);
+    TM1637_printf(&htm1637, "V.%u", i++);
     osDelay(1000);
   }
   /* USER CODE END 5 */

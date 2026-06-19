@@ -104,6 +104,23 @@ uint8_t TM1637_ASCIIToRaw(char c);
  * @param str String to display
  */
 void TM1637_ShowText(TM1637_HandleTypeDef *htm, const char *const str);
+#if defined(TM1637_PRINTF) && TM1637_PRINTF != 0
+#include <stdarg.h>
+/**
+ * @brief Formats string using format fmt, then puts it onto display.
+ * @param htm Pointer to the TM1637_HandleTypeDef structure
+ * @param fmt Format string passed to vprintf
+ * @param ... - list of argument substitutions in fmt
+ */
+bool TM1637_vprintf(TM1637_HandleTypeDef *htm, const char *const fmt, va_list l);
+/**
+ * @brief Formats string using format fmt, then puts it onto display.
+ * @param htm Pointer to the TM1637_HandleTypeDef structure
+ * @param fmt Format string passed to vprintf
+ * @param l - variable-sized list of argument substitutions in fmt
+ */
+bool TM1637_printf(TM1637_HandleTypeDef *htm, const char *const fmt, ...);
+#endif // TM1637_PRINTF
 /**
  * @brief Manually refreshes the display. Usually called from TM1637_Tick() or by TM1637_Task(),
  * so does not needed to be called manually.

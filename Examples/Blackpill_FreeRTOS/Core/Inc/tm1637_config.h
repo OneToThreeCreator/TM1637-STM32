@@ -13,4 +13,6 @@
 #define TM1637_PRIORITY osPriorityLow
 #endif
 
+#define TM1637_PRINTF 1
+
 #endif // TM1637_CONFIG_H

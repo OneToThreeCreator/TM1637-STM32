@@ -385,6 +385,8 @@ uint8_t TM1637_ASCIIToRaw(char c) {
     c = TM1637_CHAR_UNDERSCORE;
   } else if (c == '=') {
     c = TM1637_CHAR_EQUAL;
+  } else if (c == '.' || c == ',') {
+    c = TM1637_DOT;
   } else {
     return 0;
   }
@@ -393,10 +395,35 @@ uint8_t TM1637_ASCIIToRaw(char c) {
 
 void TM1637_ShowText(TM1637_HandleTypeDef *htm, const char *const str) {
   uint8_t buf[TM1637_DIGITS_MAX] = {0};
-  for (unsigned i = 0; i < htm->digits; ++i) {
-    if (str[i] == '\0')
+  for (unsigned i = 0, j = 0; i < htm->digits; ++i, ++j) {
+    if (str[j] == '\0')
       break;
-    buf[i] = TM1637_ASCIIToRaw(str[i]);
+    if ((str[j] == '.' || str[j] == ',') && i > 0 && buf[i-1] < TM1637_DOT) {
+      buf[--i] |= TM1637_DOT;
+      continue;
+    }
+    buf[i] = TM1637_ASCIIToRaw(str[j]);
   }
   TM1637_ShowRaw(htm, buf);
 }
+
+#if defined(TM1637_PRINTF) && TM1637_PRINTF != 0
+#include <stdio.h>
+#include <stdarg.h>
+
+bool TM1637_vprintf(TM1637_HandleTypeDef *htm, const char *const fmt, va_list l) {
+  char buf[TM1637_DIGITS_MAX * 2]; // Counting dots
+  if (vsnprintf(buf, htm->digits * 2, fmt, l) < 0)
+    return false;
+  TM1637_ShowText(htm, buf);
+  return true;
+}
+
+bool TM1637_printf(TM1637_HandleTypeDef *htm, const char *const fmt, ...) {
+  va_list l;
+  va_start(l, fmt);
+  bool b = TM1637_vprintf(htm, fmt, l);
+  va_end(l);
+  return b;
+}
+#endif // TM1637_PRINTF

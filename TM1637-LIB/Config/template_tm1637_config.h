@@ -8,6 +8,8 @@
 
 #define TM1637_DIGITS_MAX 8
 
+#define TM1637_PRINTF 0
+
 #if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
 #include "cmsis_os.h"
 #define TM1637_PRIORITY osPriorityLow
