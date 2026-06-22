@@ -8,7 +8,7 @@ Should work on any STM32, only tested on F401 (blackpill) for now.
 Put TM1637-LIB inside your project tree and either:
 ```cmake
 #Put it AFTER add_subdirectory(cmake/stm32cubemx)!!!
-add_subdirectory(FULL_PATH_TO_TM1637-LIB TM1637_LIB)
+add_subdirectory(FULL_PATH_TO_TM1637-LIB)
 ...
 target_link_libraries(${CMAKE_PROJECT_NAME} tm1637)
 ```
@@ -17,11 +17,14 @@ Also copy file TM1637-LIB/Config/template_tm1637_config.h to your include dir
 and rename it to "tm1637_config.h". Tweak it to your needs.
 Can be used with FreeRTOS or without, depending on application.
 ## Usage
-In CubeMX:
-Create CLK and DIO pins with push-pull or open-drain configuration.
-When using the latter, don't forget to add pullup, either external or internal.
-When using push-pull, it might be safe to decrease TM1637_DELAY_US, since TM1637 supports
-up to 250 kHz communication.
+In CubeMX (optional):
+
+Create CLK and DIO pins with open-drain configuration. Library will reconfigure them as necessary.
+Add external pullup resistor, currently library does not support internal pullup.
+
+You can use separate CLK and DIO pins for multiple displays, or you can use single common CLK pin and multiple (per display) DIO pins.
+Using single DIO pin and multiple CLK pins is not supported (it will not work).
+
 When using FreeRTOS, make sure there is some dynamic memory available (lib needs it when
 integrating with FreeRTOS).
 

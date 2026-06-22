@@ -122,11 +122,19 @@ bool TM1637_vprintf(TM1637_HandleTypeDef *htm, const char *const fmt, va_list l)
 bool TM1637_printf(TM1637_HandleTypeDef *htm, const char *const fmt, ...);
 #endif // TM1637_PRINTF
 /**
- * @brief Manually refreshes the display. Usually called from TM1637_Tick() or by TM1637_Task(),
- * so does not needed to be called manually.
+ * @brief Manually refreshes the display. Equivalent function usually called
+ * from TM1637_Tick() or by TM1637_Task(), so does not needed to be called manually.
  * @param htm Pointer to the TM1637_HandleTypeDef structure
  */
 void TM1637_UpdateOnce(TM1637_HandleTypeDef *htm);
+/**
+ * @brief Manually refreshes up to TM1637_DISPLAYS_MAX displays.
+ * Usually called from TM1637_Tick() or by TM1637_Task(),
+ * so does not needed to be called manually.
+ * @param htms Pointer to the array of TM1637_HandleTypeDef structures
+ * @param htms_count How many displays from array htms to update
+ */
+void TM1637_UpdateOnceAll(TM1637_HandleTypeDef *htms[], uint32_t htms_count);
 #if TM1637_DISPLAYS_MAX > 0
 /**
  * @brief Refreshes all connected displays one by one, waiting TM1637_UPDATE_INTERVAL_MS/htms_count.

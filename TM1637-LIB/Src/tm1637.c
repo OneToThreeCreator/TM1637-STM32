@@ -40,6 +40,7 @@
 #define TM1637_CHAR_EQUAL        10+26+2
 #define TM1637_DOT               0x80
 
+#define MAX(x, y) (((x) > (y)) ? (x) : (y))
 #define MIN(x, y) (((x) < (y)) ? (x) : (y))
 
 static const uint8_t tm1637_chars[] = {
@@ -82,7 +83,7 @@ static uint8_t tm1637_digits_order[TM1637_DIGITS_MAX]  = {0};
 static const uint8_t tm1637_6digits_order[] = {2, 1, 0, 5, 4, 3};
 #endif
 
-static void delay_us(TM1637_HandleTypeDef *h, uint32_t us) {
+static void delay_us(uint32_t us) {
   uint32_t start = SysTick->VAL;
   uint32_t coreclock = SystemCoreClock/1000000U;
   uint32_t trg = (us * coreclock);
@@ -94,67 +95,92 @@ static void delay_us(TM1637_HandleTypeDef *h, uint32_t us) {
 }
 
 // --- low-level helpers ---
-static void set_clk(TM1637_HandleTypeDef *h, GPIO_PinState s) {
-  HAL_GPIO_WritePin(h->clk_port, h->clk_pin, s);
-  delay_us(h, TM1637_DELAY_US);
+static void set_clk(TM1637_HandleTypeDef **h, uint32_t c, GPIO_PinState s) {
+  for (unsigned i = 0; i < c; ++i)
+    HAL_GPIO_WritePin(h[i]->clk_port, h[i]->clk_pin, s);
+  delay_us(TM1637_DELAY_US);
 }
-static void set_dio(TM1637_HandleTypeDef *h, GPIO_PinState s) {
-  HAL_GPIO_WritePin(h->dio_port, h->dio_pin, s);
-  delay_us(h, TM1637_DELAY_US);
+static void set_dio(TM1637_HandleTypeDef **h, uint32_t c, GPIO_PinState s) {
+  for (unsigned i = 0; i < c; ++i)
+    HAL_GPIO_WritePin(h[i]->dio_port, h[i]->dio_pin, s);
+  delay_us(TM1637_DELAY_US);
 }
 
-static void dio_out(TM1637_HandleTypeDef *h) {
+static void set_dios(TM1637_HandleTypeDef **h, uint32_t c, uint8_t s[]) {
+  for (unsigned i = 0; i < c; ++i)
+    HAL_GPIO_WritePin(h[i]->dio_port, h[i]->dio_pin, (s[i] & 0x1) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  delay_us(TM1637_DELAY_US);
+}
+
+static void dio_out(TM1637_HandleTypeDef **h, uint32_t c) {
   GPIO_InitTypeDef gpio = {0};
-  gpio.Pin = h->dio_pin;
   gpio.Mode = GPIO_MODE_OUTPUT_OD;
   gpio.Pull = GPIO_NOPULL;
   gpio.Speed = GPIO_SPEED_FREQ_HIGH;
-  HAL_GPIO_Init(h->dio_port, &gpio);
+  for (unsigned i = 0; i < c; ++i) {
+    gpio.Pin = h[i]->dio_pin;
+    HAL_GPIO_Init(h[i]->dio_port, &gpio);
+  }
 }
-static void dio_in(TM1637_HandleTypeDef *h) {
+static void dio_in(TM1637_HandleTypeDef **h, uint32_t c) {
   GPIO_InitTypeDef gpio = {0};
-  gpio.Pin = h->dio_pin;
   gpio.Mode = GPIO_MODE_INPUT;
   gpio.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(h->dio_port, &gpio);
-}
-
-static void start_cond(TM1637_HandleTypeDef *h) {
-  dio_out(h);
-  set_clk(h, GPIO_PIN_SET);
-  set_dio(h, GPIO_PIN_SET);
-  set_dio(h, GPIO_PIN_RESET);
-  set_clk(h, GPIO_PIN_RESET);
-}
-static void stop_cond(TM1637_HandleTypeDef *h) {
-  dio_out(h);
-  set_clk(h, GPIO_PIN_RESET);
-  set_dio(h, GPIO_PIN_RESET);
-  set_clk(h, GPIO_PIN_SET);
-  set_dio(h, GPIO_PIN_SET);
-}
-
-static bool write_byte(TM1637_HandleTypeDef *h, uint8_t b) {
-  dio_out(h);
-  for (int i=0;i<8;i++){
-    set_clk(h, GPIO_PIN_RESET);
-    if (b & 0x01) set_dio(h, GPIO_PIN_SET); else set_dio(h, GPIO_PIN_RESET);
-    b >>= 1;
-    set_clk(h, GPIO_PIN_SET);
+  for (unsigned i = 0; i < c; ++i) {
+    gpio.Pin = h[i]->dio_pin;
+    HAL_GPIO_Init(h[i]->dio_port, &gpio);
   }
-  // ACK
-  set_clk(h, GPIO_PIN_RESET);
-  dio_in(h);
-  set_clk(h, GPIO_PIN_SET);
-  bool ack = (HAL_GPIO_ReadPin(h->dio_port, h->dio_pin) == GPIO_PIN_RESET);
-  set_clk(h, GPIO_PIN_RESET);
-  dio_out(h);
+}
+
+static void start_cond(TM1637_HandleTypeDef **h, uint32_t c) {
+  set_clk(h, c, GPIO_PIN_SET);
+  set_dio(h, c, GPIO_PIN_SET);
+  set_dio(h, c, GPIO_PIN_RESET);
+  set_clk(h, c, GPIO_PIN_RESET);
+}
+static void stop_cond(TM1637_HandleTypeDef **h, uint32_t c) {
+  set_clk(h, c, GPIO_PIN_RESET);
+  set_dio(h, c, GPIO_PIN_RESET);
+  set_clk(h, c, GPIO_PIN_SET);
+  set_dio(h, c, GPIO_PIN_SET);
+}
+
+static bool get_ack(TM1637_HandleTypeDef **h, uint32_t c) {
+  set_clk(h, c, GPIO_PIN_RESET);
+  dio_in(h, c);
+  set_clk(h, c, GPIO_PIN_SET);
+  bool ack = true;
+  for (unsigned i = 0; i < c; ++i)
+    ack = ack && (HAL_GPIO_ReadPin(h[i]->dio_port, h[i]->dio_pin) == GPIO_PIN_RESET);
+  set_clk(h, c, GPIO_PIN_RESET);
+  dio_out(h, c);
   return ack;
 }
 
-static void copy_raw_ordered(uint8_t *buf, TM1637_HandleTypeDef *htm) {
+static bool write_byte(TM1637_HandleTypeDef **h, uint32_t c, uint8_t b) {
+  for (int i=0; i<8; i++){
+    set_clk(h, c, GPIO_PIN_RESET);
+    set_dio(h, c, (b & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+    b >>= 1;
+    set_clk(h, c, GPIO_PIN_SET);
+  }
+  return get_ack(h, c);
+}
+
+static bool write_bytes(TM1637_HandleTypeDef **h, uint32_t c, uint8_t *b) {
+  for (unsigned i = 0; i < 8; ++i) {
+    set_clk(h, c, GPIO_PIN_RESET);
+    set_dios(h, c, b);
+    for (unsigned j = 0; j < c; ++j)
+      b[j] >>= 1;
+    set_clk(h, c, GPIO_PIN_SET);
+  }
+  return get_ack(h, c);
+}
+
+static void copy_raw_ordered(uint8_t *buf, TM1637_HandleTypeDef *htm, uint32_t displays_count) {
   for (unsigned i = 0; i < htm->digits; ++i) {
-    buf[i] = htm->raw[htm->digits_order[i]];
+    buf[i*displays_count] = htm->raw[htm->digits_order[i]];
   }
 }
 
@@ -207,36 +233,48 @@ void TM1637_Clear(TM1637_HandleTypeDef *htm) {
 }
 
 void TM1637_UpdateOnce(TM1637_HandleTypeDef *htm) {
-  uint8_t buf[TM1637_DIGITS_MAX];
-  unsigned digits = TM1637_DIGITS_MAX;
-#if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
-  if (htm->mutex) {
-    if (xSemaphoreTake(htm->mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-      digits = htm->digits;
-      copy_raw_ordered(buf, htm);
-      xSemaphoreGive(htm->mutex);
-    } else {
-      return; // Mutex aquiring failed
-    }
-  } else
-#endif // TM1637_USE_FREERTOS
-    copy_raw_ordered(buf, htm), digits = htm->digits;
-  // Auto-increment mode
-  start_cond(htm);
-  write_byte(htm, 0x40);
-  stop_cond(htm);
+  TM1637_UpdateOnceAll(&htm, 1);
+}
 
-  start_cond(htm);
-  write_byte(htm, 0xC0); // Address 0
-  for (unsigned i = 0; i < digits; ++i){
-    write_byte(htm, buf[i]);
+void TM1637_UpdateOnceAll(TM1637_HandleTypeDef *htms[], uint32_t htms_count) {
+  if (htms_count <= 0 || htms_count > MAX(TM1637_DISPLAYS_MAX, 1))
+    return;
+  uint8_t buf[TM1637_DIGITS_MAX * MAX(TM1637_DISPLAYS_MAX, 1)] = {0};
+  uint8_t brightness_buf[MAX(TM1637_DISPLAYS_MAX, 1)] = {0};
+  unsigned digits = 0;
+  for (unsigned i = 0; i < htms_count; ++i) {
+#if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
+    if (htms[i]->mutex) {
+      if (xSemaphoreTake(htms[i]->mutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+        digits = MAX(htms[i]->digits, digits);
+        copy_raw_ordered(buf + i, htms[i], htms_count);
+        brightness_buf[i] = 0x88 | (htms[i]->brightness & 0x07);
+        xSemaphoreGive(htms[i]->mutex);
+      } else {
+        return; // Mutex aquiring failed
+      }
+    } else
+  #endif // TM1637_USE_FREERTOS
+      copy_raw_ordered(buf + i, htms[i], htms_count),
+      brightness_buf[i] = 0x88 | (htms[i]->brightness & 0x07),
+      digits = MAX(htms[i]->digits, digits);
   }
-  stop_cond(htm);
+  // Auto-increment mode
+  start_cond(htms, htms_count);
+  write_byte(htms, htms_count, 0x40);
+  stop_cond(htms, htms_count);
+
+  start_cond(htms, htms_count);
+  write_byte(htms, htms_count, 0xC0); // Address 0
+  for (unsigned i = 0; i < digits; ++i){
+    write_bytes(htms, htms_count, buf + i*htms_count);
+  }
+  stop_cond(htms, htms_count);
 
   // Brightness cmd
-  start_cond(htm);
-  write_byte(htm, 0x88 | (htm->brightness & 0x07));
-  stop_cond(htm);
+  start_cond(htms, htms_count);
+  write_bytes(htms, htms_count, brightness_buf);
+  stop_cond(htms, htms_count);
 }
 
 #if TM1637_DISPLAYS_MAX > 0
@@ -268,6 +306,15 @@ void TM1637_Init(TM1637_HandleTypeDef *htm) {
       }
     }
   }
+  // Pin reconfiguration
+  GPIO_InitTypeDef gpio = {0};
+  gpio.Mode = GPIO_MODE_OUTPUT_OD;
+  gpio.Pull = GPIO_NOPULL;
+  gpio.Speed = GPIO_SPEED_FREQ_HIGH;
+  gpio.Pin = htm->dio_pin;
+  HAL_GPIO_Init(htm->dio_port, &gpio);
+  gpio.Pin = htm->clk_pin;
+  HAL_GPIO_Init(htm->clk_port, &gpio);
 #if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
   if (htm->mutex == NULL) {
     htm->mutex = xSemaphoreCreateMutex();
@@ -279,25 +326,19 @@ void TM1637_Init(TM1637_HandleTypeDef *htm) {
 #if TM1637_DISPLAYS_MAX > 0
 void TM1637_Tick(void) {
   static uint32_t lastcalled = 0;
-  static uint32_t i = 0;
   uint32_t time = HAL_GetTick();
-  if (time - lastcalled < TM1637_UPDATE_INTERVAL_MS / htms_count)
+  if (time - lastcalled < TM1637_UPDATE_INTERVAL_MS)
     return;
   lastcalled = time;
-  TM1637_UpdateOnce(htms[i++]);
-  if (i >= htms_count)
-    i = 0;
+  TM1637_UpdateOnceAll(htms, htms_count);
 }
 
 #if defined(TM1637_USE_FREERTOS) && TM1637_USE_FREERTOS > 0
 static void TM1637_Task(void *empty) {
   TickType_t xLastWakeTime = xTaskGetTickCount();
-  uint32_t i = 0;
   for (;;){
-    TM1637_UpdateOnce(htms[i++]);
-    if (i >= htms_count)
-      i = 0;
-    uint32_t waitfor = pdMS_TO_TICKS(TM1637_UPDATE_INTERVAL_MS / htms_count);
+    TM1637_UpdateOnceAll(htms, htms_count);
+    uint32_t waitfor = pdMS_TO_TICKS(TM1637_UPDATE_INTERVAL_MS);
     vTaskDelayUntil(&xLastWakeTime, waitfor);
   }
 }

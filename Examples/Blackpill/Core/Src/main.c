@@ -43,13 +43,21 @@
 RTC_HandleTypeDef hrtc;
 
 /* USER CODE BEGIN PV */
-TM1637_HandleTypeDef htm1637 = {
+TM1637_HandleTypeDef htm1 = {
   .brightness = 7,
   .digits = 4,
   .clk_port = CLK_GPIO_Port,
   .clk_pin = CLK_Pin,
-  .dio_port = DIO_GPIO_Port,
-  .dio_pin = DIO_Pin,
+  .dio_port = DIO1_GPIO_Port,
+  .dio_pin = DIO1_Pin,
+};
+TM1637_HandleTypeDef htm2 = {
+  .brightness = 7,
+  .digits = 4,
+  .clk_port = CLK_GPIO_Port,
+  .clk_pin = CLK_Pin,
+  .dio_port = DIO2_GPIO_Port,
+  .dio_pin = DIO2_Pin,
 };
 /* USER CODE END PV */
 
@@ -97,7 +105,8 @@ int main(void)
   MX_GPIO_Init();
   MX_RTC_Init();
   /* USER CODE BEGIN 2 */
-  TM1637_Init(&htm1637);
+  TM1637_Init(&htm1);
+  TM1637_Init(&htm2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -110,7 +119,8 @@ int main(void)
     (void)RTC->DR; // Always read data register!
     if (prevtime != time) {
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-      TM1637_ShowBCD(&htm1637, time);
+      TM1637_ShowBCD(&htm1, time);
+      TM1637_ShowBCD_HM(&htm2, time);
       prevtime = time;
     }
   }
@@ -216,13 +226,17 @@ static void MX_GPIO_Init(void)
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, DIO_Pin|CLK_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(DIO2_GPIO_Port, DIO2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOB, DIO1_Pin|CLK_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : LED_Pin */
   GPIO_InitStruct.Pin = LED_Pin;
@@ -231,11 +245,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : DIO_Pin CLK_Pin */
-  GPIO_InitStruct.Pin = DIO_Pin|CLK_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  /*Configure GPIO pin : DIO2_Pin */
+  GPIO_InitStruct.Pin = DIO2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
+  HAL_GPIO_Init(DIO2_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : DIO1_Pin CLK_Pin */
+  GPIO_InitStruct.Pin = DIO1_Pin|CLK_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
