@@ -283,9 +283,9 @@ uint32_t htms_count = 0;
 #endif
 
 void TM1637_Init(TM1637_HandleTypeDef *htm) {
-  assert(htm->digits < TM1637_DIGITS_MAX);
+  assert(htm->digits <= TM1637_DIGITS_MAX);
   if (htm->digits == 0)
-    htm->digits = 4; // Reasonable default, clock displays show up relatively often
+    htm->digits = MIN(4, TM1637_DIGITS_MAX); // Reasonable default, TM1637-based clock displays show up relatively often
 #if TM1637_DISPLAYS_MAX > 0
   assert(htms_count < TM1637_DISPLAYS_MAX);
   htms[htms_count++] = htm;
